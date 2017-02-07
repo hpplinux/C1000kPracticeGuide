@@ -6,6 +6,10 @@ pthread_t t_all[MAX_CPU] = {0};
 cpu_set_t mask[MAX_CPU];
 
 // 鍛戒护绠￠亾
+/***
+[HP]这个变量没有初始化过，直接使用，很囧
+推测是调用了pipe函数，接受进程和工作进程之间通信用的
+**/
 int sv[MAX_CPU][2] = {};
 int cpu_cmd_map[MAX_CPU][2];
 int cpu_num = 1;
@@ -19,6 +23,9 @@ struct epoll_event *m_events;
 
 int epollfd;
 
+/**
+全局的accept到的fd的链表，每一个item实际都是一组fd的数组。
+**/
 struct accepted_fd *g_fd;
 
 pthread_mutex_t dispatch_mutex;

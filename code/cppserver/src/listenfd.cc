@@ -1,6 +1,7 @@
 #include "network.h"
 
 extern PFdProcess gFdProcess[MAX_FD];
+
 extern int sv[MAX_CPU][2];
 extern struct sendfdbuff order_list[MAX_CPU];
 extern int cpu_num;
@@ -21,6 +22,9 @@ int accept_readfun(int epollfd, int listenfd, timer_link *timerlink) {
 
     char buff[MAXACCEPTSIZE * 4] = {0};
     int acceptindex = 0;
+	/**
+     使用pbuff先把收到的fd请求缓存起来，等到一定数量一次性发送给dispatch线程处理.
+	**/
     int *pbuff = (int *)buff;
 
     while (true) {
@@ -98,6 +102,9 @@ int fdsend_writefun(int epollfd, int sendfd, timer_link *timerlink) {
     return sendbuff(sendfd);
 }
 
+/**
+存储的什么数据呢? 
+**/
 int movefddata(int fd, char *buff, int len) {
 
     memmove(order_list[fd].buff + order_list[fd].len, buff, len);
@@ -105,6 +112,11 @@ int movefddata(int fd, char *buff, int len) {
     return order_list[fd].len;
 }
 
+/**
+order_list[fd].buff 存储的什么数据呢?  
+分成若干次发送会不会导致一条的请求分成两部分呢?
+
+***/
 int sendbuff(int fd) {
 
     int needsend = order_list[fd].len;
@@ -131,20 +143,34 @@ int sendbuff(int fd) {
     return sended;
 }
 
+/*
+一次接受整个的g_fd 的数组链上的数据来处理。
+*/
 void *dispatch_conn(void *arg) {
     static long sum = 0;
     struct accepted_fd *paccept = NULL;
     for (;;) {
         pthread_mutex_lock(&dispatch_mutex);
-        if (g_fd) {
+
+		/***自己实现
+		while(!g_fd){
+			pthread_cond_wait(&dispatch_cond, &dispatch_mutex);
+		}
+		paccept=g_fd;
+		g_fd=NULL;
+		***/
+		if (g_fd) {
             paccept = g_fd;
             g_fd = NULL;
 
         } else {
+            /*会不会有这样的问题，多个都被唤醒，只有一个得到了g_fd,其他线程
+			处理的时候其实g_fd已经为null了，上面有自己的实现*/
             pthread_cond_wait(&dispatch_cond, &dispatch_mutex);
             paccept = g_fd;
             g_fd = NULL;
         }
+		
 
         pthread_mutex_unlock(&dispatch_mutex);
         while (paccept) {
